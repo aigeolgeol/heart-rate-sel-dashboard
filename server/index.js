@@ -158,7 +158,6 @@ function generateMockStudents() {
     else if (totalScore >= 51) actualStage = 3;
     else if (totalScore >= 26) actualStage = 2;
 
-    studentsStore = studentsStore || [];
     students.push({
       id: `STU-${100 + i}`,
       username: `stu${100 + i}`,

@@ -498,3 +498,5 @@ if (fs.existsSync(clientDistPath)) {
 app.listen(PORT, () => {
   console.log(`Heart Rate Dashboard Server running on http://localhost:${PORT}`);
 });
+
+export default app;

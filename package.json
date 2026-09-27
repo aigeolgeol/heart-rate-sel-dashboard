@@ -1,0 +1,16 @@
+{
+  "name": "heart-rate-sel-dashboard",
+  "version": "1.0.0",
+  "description": "심박수로 나를 알자 - 초등 5학년 신체·정서 SEL 대시보드 웹앱",
+  "main": "server/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "build": "cd client && npm run build",
+    "server": "cd server && npm start",
+    "client": "cd client && npm run dev"
+  },
+  "keywords": [],
+  "author": "나경재",
+  "license": "ISC"
+}

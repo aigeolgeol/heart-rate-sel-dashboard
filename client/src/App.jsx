@@ -1,60 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
+import AuthView from './components/AuthView';
 import StudentChatView from './components/StudentChatView';
 import StudentGrowthRecordView from './components/StudentGrowthRecordView';
 import TeacherDashboardView from './components/TeacherDashboardView';
+import AdminDashboardView from './components/AdminDashboardView';
 import EvolutionModal from './components/EvolutionModal';
 
 export default function App() {
-  const [viewMode, setViewMode] = useState('student'); // 'student' | 'teacher'
+  const [currentUser, setCurrentUser] = useState(null); // null means logged out
   const [studentSubTab, setStudentSubTab] = useState('chat'); // 'chat' | 'record'
-  
   const [currentSession, setCurrentSession] = useState(4); // Default session
-  const [studentsList, setStudentsList] = useState([]);
-  const [currentStudentId, setCurrentStudentId] = useState('');
-  const [currentStudent, setCurrentStudent] = useState(null);
-
+  const [currentStudentDetail, setCurrentStudentDetail] = useState(null);
   const [showEvolutionModal, setShowEvolutionModal] = useState(false);
 
-  // Fetch initial student list
-  const loadStudents = async () => {
-    try {
-      const res = await fetch(`/api/students?session=${currentSession}`);
-      const data = await res.json();
-      setStudentsList(data.students);
-      if (data.students.length > 0 && !currentStudentId) {
-        setCurrentStudentId(data.students[0].id);
-      }
-    } catch (err) {
-      console.error("Failed to load students:", err);
-    }
-  };
+  // Fetch current session settings on mount
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.currentSession) setCurrentSession(data.currentSession);
+      })
+      .catch(err => console.error(err));
+  }, []);
 
-  // Fetch detailed student data when selection or session changes
-  const loadCurrentStudentDetail = async (id, session) => {
-    if (!id) return;
+  // Fetch student detailed data if logged in as student
+  const loadStudentDetailData = async (username, session) => {
     try {
-      const res = await fetch(`/api/students/${id}`);
+      const res = await fetch(`/api/students/${username}`);
       const data = await res.json();
-      // Update visibleStage based on currentSession
       data.visibleStage = session >= 8 ? data.actualStage : 1;
-      setCurrentStudent(data);
+      setCurrentStudentDetail(data);
     } catch (err) {
-      console.error("Failed to load student detail:", err);
+      console.error(err);
     }
   };
 
   useEffect(() => {
-    loadStudents();
-  }, [currentSession]);
-
-  useEffect(() => {
-    if (currentStudentId) {
-      loadCurrentStudentDetail(currentStudentId, currentSession);
+    if (currentUser && currentUser.role === 'student') {
+      loadStudentDetailData(currentUser.username || currentUser.id, currentSession);
     }
-  }, [currentStudentId, currentSession]);
+  }, [currentUser, currentSession]);
 
-  // Handle Session Change
+  // Login Success Handler
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    if (user.role === 'student') {
+      loadStudentDetailData(user.username || user.id, currentSession);
+    }
+  };
+
+  // Logout Handler
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentStudentDetail(null);
+  };
+
+  // Global Session Switcher
   const handleSessionChange = async (newSession) => {
     setCurrentSession(newSession);
     try {
@@ -71,49 +73,58 @@ export default function App() {
     }
   };
 
+  // If not logged in, show Auth Gate Landing Page
+  if (!currentUser) {
+    return <AuthView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
       
       {/* Navigation Bar */}
       <Navbar
-        viewMode={viewMode}
-        setViewMode={setViewMode}
+        currentUser={currentUser}
+        onLogout={handleLogout}
         studentSubTab={studentSubTab}
         setStudentSubTab={setStudentSubTab}
-        currentStudentId={currentStudentId}
-        setCurrentStudentId={setCurrentStudentId}
-        studentsList={studentsList}
         currentSession={currentSession}
         setCurrentSession={handleSessionChange}
       />
 
-      {/* Main Content Area */}
+      {/* Main Content Router */}
       <main className="flex-1 pb-12">
-        {viewMode === 'student' ? (
+        {currentUser.role === 'student' ? (
           studentSubTab === 'chat' ? (
             <StudentChatView 
-              student={currentStudent} 
+              student={currentStudentDetail} 
               currentSession={currentSession}
               onSubmissionSuccess={() => {
-                loadStudents();
-                if (currentStudentId) loadCurrentStudentDetail(currentStudentId, currentSession);
+                if (currentUser) loadStudentDetailData(currentUser.username || currentUser.id, currentSession);
               }}
             />
           ) : (
             <StudentGrowthRecordView 
-              student={currentStudent} 
+              student={currentStudentDetail} 
               currentSession={currentSession}
             />
           )
+        ) : currentUser.role === 'teacher' ? (
+          <TeacherDashboardView 
+            currentSession={currentSession} 
+            currentUser={currentUser}
+          />
         ) : (
-          <TeacherDashboardView currentSession={currentSession} />
+          <AdminDashboardView 
+            currentSession={currentSession}
+            onSessionChange={handleSessionChange}
+          />
         )}
       </main>
 
-      {/* Celebratory 8th Session Evolution Unlocked Modal */}
+      {/* Session 8 Evolution Modal */}
       {showEvolutionModal && (
         <EvolutionModal 
-          student={currentStudent} 
+          student={currentStudentDetail} 
           onClose={() => setShowEvolutionModal(false)} 
         />
       )}
@@ -122,10 +133,10 @@ export default function App() {
       <footer className="bg-slate-900 text-slate-400 py-6 border-t border-slate-800 text-center text-xs">
         <div className="max-w-7xl mx-auto px-4">
           <p className="font-semibold text-slate-300">
-            [개발기획서 구현물] 심박수로 나를 알자 - 초등 5학년 신체·정서 SEL 모니터링 웹앱
+            [디지털 SEL 대시보드] 심박수로 나를 알자 - 로그인 &amp; 역할별 통합 관리 시스템
           </p>
           <p className="mt-1 text-slate-500">
-            제출자: 나경재 | 기술 스택: React, Tailwind CSS, Express, Gemini Multimodal Vision &amp; SEL Analyzer
+            접속 권한: <strong className="text-white">{currentUser.name}</strong> ({currentUser.role.toUpperCase()}) | 제출자: 나경재
           </p>
         </div>
       </footer>

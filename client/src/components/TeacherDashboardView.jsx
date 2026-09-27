@@ -15,11 +15,14 @@ import {
   List,
   Heart,
   TrendingUp,
-  Clock
+  UserPlus,
+  PlusCircle,
+  School,
+  Key
 } from 'lucide-react';
 import SimdongiAvatar from './SimdongiAvatar';
 
-export default function TeacherDashboardView({ currentSession }) {
+export default function TeacherDashboardView({ currentSession, currentUser }) {
   const [selectedClass, setSelectedClass] = useState('all');
   const [riskFilterOnly, setRiskFilterOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,6 +35,22 @@ export default function TeacherDashboardView({ currentSession }) {
 
   const [teacherCommentInput, setTeacherCommentInput] = useState('');
   const [sendingComment, setSendingComment] = useState(false);
+
+  // Class Creation Modal state
+  const [showCreateClassModal, setShowCreateClassModal] = useState(false);
+  const [newClassNumberInput, setNewClassNumberInput] = useState('');
+  const [createClassMsg, setCreateClassMsg] = useState('');
+
+  // Student Account Creation Modal state
+  const [showCreateStudentModal, setShowCreateStudentModal] = useState(false);
+  const [studentForm, setStudentForm] = useState({
+    classNumber: '1',
+    name: '',
+    studentNumber: '21',
+    username: '',
+    password: 'stu1234'
+  });
+  const [createStudentMsg, setCreateStudentMsg] = useState('');
 
   // Fetch Class Stats & Students List
   const fetchData = async () => {
@@ -95,6 +114,69 @@ export default function TeacherDashboardView({ currentSession }) {
     }
   };
 
+  // Create New Class Handler
+  const handleCreateClassSubmit = async (e) => {
+    e.preventDefault();
+    setCreateClassMsg('');
+    try {
+      const res = await fetch('/api/teacher/classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacherId: currentUser ? currentUser.id : 'TCH-101',
+          classNumber: newClassNumberInput,
+          className: `5학년 ${newClassNumberInput}반`
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setCreateClassMsg(data.message);
+        setTimeout(() => {
+          setShowCreateClassModal(false);
+          setNewClassNumberInput('');
+          setCreateClassMsg('');
+          fetchData();
+        }, 1200);
+      } else {
+        setCreateClassMsg(data.error || '학급 개설 실패');
+      }
+    } catch (err) {
+      setCreateClassMsg('서버 오류');
+    }
+  };
+
+  // Create Student Account Handler
+  const handleCreateStudentSubmit = async (e) => {
+    e.preventDefault();
+    setCreateStudentMsg('');
+    try {
+      const res = await fetch('/api/teacher/create-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacherId: currentUser ? currentUser.id : 'TCH-101',
+          ...studentForm
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setCreateStudentMsg(data.message);
+        setTimeout(() => {
+          setShowCreateStudentModal(false);
+          setStudentForm({ classNumber: '1', name: '', studentNumber: '21', username: '', password: 'stu1234' });
+          setCreateStudentMsg('');
+          fetchData();
+        }, 1500);
+      } else {
+        setCreateStudentMsg(data.error || '학생 계정 생성 실패');
+      }
+    } catch (err) {
+      setCreateStudentMsg('서버 오류');
+    }
+  };
+
   const filteredStudents = students.filter(s => 
     s.name.includes(searchQuery) || s.studentNumber.toString().includes(searchQuery)
   );
@@ -106,27 +188,51 @@ export default function TeacherDashboardView({ currentSession }) {
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900">교사용 학급 카드 대시보드</h2>
+            <h2 className="text-xl font-bold text-slate-900">
+              교사 전용 학급 대시보드 ({currentUser ? currentUser.name : '김선생 교사'})
+            </h2>
             <span className="px-3 py-0.5 text-xs font-semibold bg-indigo-100 text-indigo-700 rounded-full">
               {currentSession}차시 모니터링
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            개별 학생의 심박수·정서 카드 시각화, 정서 관심 알림 및 실시간 피드백 전송
+            학급 개설, 학생 아이디/비밀번호 생성 및 공유, 정서 이상징후 모니터링
           </p>
         </div>
 
-        {/* Class Filter Tabs */}
-        <div className="flex items-center space-x-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+        {/* Action Buttons: Create Class & Create Student */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowCreateClassModal(true)}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <PlusCircle size={15} className="text-amber-400" />
+            <span>신규 학급 개설</span>
+          </button>
+
+          <button
+            onClick={() => setShowCreateStudentModal(true)}
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <UserPlus size={15} />
+            <span>학생 계정 생성 &amp; 부여</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Class Filter Tabs */}
+      <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200">
+        <span className="text-xs font-bold text-slate-700 ml-2">조회 학급:</span>
+        <div className="flex items-center space-x-1.5">
           <button
             onClick={() => setSelectedClass('all')}
             className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
               selectedClass === 'all'
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
             }`}
           >
-            전체 (60명)
+            전체 학급
           </button>
           {[1, 2, 3].map(cNum => (
             <button
@@ -135,7 +241,7 @@ export default function TeacherDashboardView({ currentSession }) {
               className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 selectedClass === cNum.toString()
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
               }`}
             >
               5학년 {cNum}반
@@ -147,8 +253,7 @@ export default function TeacherDashboardView({ currentSession }) {
       {/* Summary KPI Cards Grid */}
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Card 1 */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-slate-500">마음 돌아보기 제출률</p>
               <p className="text-3xl font-black text-slate-900 mt-1.5">{stats.submissionRate}%</p>
@@ -161,8 +266,7 @@ export default function TeacherDashboardView({ currentSession }) {
             </div>
           </div>
 
-          {/* Card 2 */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-slate-500">평균 신체 점수 (50만점)</p>
               <p className="text-3xl font-black text-sky-600 mt-1.5">{stats.avgPhysical}점</p>
@@ -175,8 +279,7 @@ export default function TeacherDashboardView({ currentSession }) {
             </div>
           </div>
 
-          {/* Card 3 */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-slate-500">평균 정서 점수 (50만점)</p>
               <p className="text-3xl font-black text-rose-600 mt-1.5">{stats.avgEmotional}점</p>
@@ -189,7 +292,6 @@ export default function TeacherDashboardView({ currentSession }) {
             </div>
           </div>
 
-          {/* Card 4 (Risk Anomaly Alert Card) */}
           <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-6 rounded-3xl text-white shadow-md flex items-center justify-between">
             <div>
               <p className="text-xs font-bold text-amber-100 uppercase tracking-wider">정서 관심 학생</p>
@@ -205,9 +307,7 @@ export default function TeacherDashboardView({ currentSession }) {
 
       {/* Control Bar (Search, Risk Filter & View Mode Switcher) */}
       <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-        
         <div className="flex items-center space-x-3 w-full sm:w-auto">
-          {/* Search Input */}
           <div className="relative flex-1 sm:w-72">
             <Search className="absolute left-3.5 top-3 text-slate-400" size={16} />
             <input 
@@ -219,7 +319,6 @@ export default function TeacherDashboardView({ currentSession }) {
             />
           </div>
 
-          {/* Risk Only Toggle */}
           <button
             onClick={() => setRiskFilterOnly(!riskFilterOnly)}
             className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all border ${
@@ -233,12 +332,7 @@ export default function TeacherDashboardView({ currentSession }) {
           </button>
         </div>
 
-        {/* View Mode Switcher (Card View vs Table View) */}
         <div className="flex items-center space-x-3">
-          <p className="text-xs text-slate-500 hidden sm:block">
-            검색된 학생: <strong className="text-slate-800">{filteredStudents.length}</strong>명
-          </p>
-
           <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
             <button
               onClick={() => setDisplayMode('card')}
@@ -265,7 +359,6 @@ export default function TeacherDashboardView({ currentSession }) {
             </button>
           </div>
         </div>
-
       </div>
 
       {/* STUDENT CARDS GRID DISPLAY MODE */}
@@ -280,8 +373,6 @@ export default function TeacherDashboardView({ currentSession }) {
                   : 'border-slate-200 hover:border-slate-300'
               }`}
             >
-              
-              {/* Card Header: Avatar, Name, Risk Tag */}
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
@@ -294,15 +385,14 @@ export default function TeacherDashboardView({ currentSession }) {
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        심동이 진화 단계: <strong className="text-slate-700">{stu.actualStage}단계</strong>
+                        로그인 ID: <code className="text-indigo-600 font-bold">{stu.username || `stu${stu.studentNumber}`}</code>
                       </p>
                     </div>
                   </div>
 
-                  {/* Submission Status Badge */}
                   {stu.hasSubmitted ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200">
-                      <CheckCircle2 size={12} /> 작성완료
+                      <CheckCircle2 size={12} /> 완료
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-500 text-xs font-medium rounded-full">
@@ -311,7 +401,6 @@ export default function TeacherDashboardView({ currentSession }) {
                   )}
                 </div>
 
-                {/* Risk Flag Alert Tag if active */}
                 {stu.hasRiskFlag && (
                   <div className="mt-4 p-3 bg-amber-500/10 border border-amber-400/40 rounded-2xl text-xs text-amber-900 flex items-start gap-2 animate-pulse">
                     <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
@@ -322,10 +411,7 @@ export default function TeacherDashboardView({ currentSession }) {
                   </div>
                 )}
 
-                {/* Score Stats Progress Bars */}
                 <div className="mt-5 space-y-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
-                  
-                  {/* Total Growth Score */}
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span className="text-slate-700 flex items-center gap-1">
@@ -341,7 +427,6 @@ export default function TeacherDashboardView({ currentSession }) {
                     </div>
                   </div>
 
-                  {/* Physical vs Emotional breakdown */}
                   <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 text-xs">
                     <div>
                       <span className="text-slate-400 block text-[10px]">신체 영역(50점)</span>
@@ -352,22 +437,19 @@ export default function TeacherDashboardView({ currentSession }) {
                       <span className="font-bold text-emerald-600 text-sm">{stu.emotionalScore}점</span>
                     </div>
                   </div>
-
                 </div>
 
-                {/* Heart Rate Stats & Activity preview */}
                 <div className="mt-3 flex items-center justify-between text-xs px-2 text-slate-500">
                   <span className="flex items-center gap-1">
                     <Heart size={13} className="text-rose-500 fill-rose-500" />
                     최고 심박수: <strong className="text-slate-800">{stu.maxBpm} bpm</strong>
                   </span>
                   <span className="text-slate-400">
-                    {stu.teacherComment ? '💬 교사 피드백 완료' : '📝 피드백 대기'}
+                    {stu.teacherComment ? '💬 피드백 작성완료' : '📝 피드백 대기'}
                   </span>
                 </div>
               </div>
 
-              {/* Card Action Button */}
               <div className="mt-5 pt-3 border-t border-slate-100">
                 <button
                   onClick={() => handleOpenDetail(stu.id)}
@@ -382,7 +464,6 @@ export default function TeacherDashboardView({ currentSession }) {
           ))}
         </div>
       ) : (
-        /* TABLE DISPLAY MODE */
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
@@ -391,25 +472,21 @@ export default function TeacherDashboardView({ currentSession }) {
                   <th className="py-3.5 px-4">번호</th>
                   <th className="py-3.5 px-4">학급</th>
                   <th className="py-3.5 px-4">이름</th>
+                  <th className="py-3.5 px-4">로그인 ID</th>
                   <th className="py-3.5 px-4">제출 상태</th>
                   <th className="py-3.5 px-4">최고 심박수</th>
-                  <th className="py-3.5 px-4">신체점수</th>
-                  <th className="py-3.5 px-4">정서점수</th>
                   <th className="py-3.5 px-4">총 성장점수</th>
                   <th className="py-3.5 px-4">단계</th>
-                  <th className="py-3.5 px-4">관심 징후</th>
                   <th className="py-3.5 px-4 text-center">상세보기</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredStudents.map((stu) => (
-                  <tr 
-                    key={stu.id} 
-                    className={`hover:bg-slate-50 transition-colors ${stu.hasRiskFlag ? 'bg-amber-50/40' : ''}`}
-                  >
+                  <tr key={stu.id} className={`hover:bg-slate-50 transition-colors ${stu.hasRiskFlag ? 'bg-amber-50/40' : ''}`}>
                     <td className="py-3 px-4 font-bold text-slate-500">{stu.studentNumber}번</td>
                     <td className="py-3 px-4 font-semibold text-slate-700">5-{stu.classNumber}반</td>
                     <td className="py-3 px-4 font-bold text-slate-900">{stu.name}</td>
+                    <td className="py-3 px-4 font-bold text-indigo-600">{stu.username}</td>
                     <td className="py-3 px-4">
                       {stu.hasSubmitted ? (
                         <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full font-semibold">
@@ -422,21 +499,11 @@ export default function TeacherDashboardView({ currentSession }) {
                       )}
                     </td>
                     <td className="py-3 px-4 font-bold text-rose-600">{stu.maxBpm} bpm</td>
-                    <td className="py-3 px-4 font-semibold text-sky-600">{stu.physicalScore}점</td>
-                    <td className="py-3 px-4 font-semibold text-emerald-600">{stu.emotionalScore}점</td>
                     <td className="py-3 px-4 font-black text-rose-600 text-sm">{stu.currentScore}점</td>
                     <td className="py-3 px-4">
                       <span className="px-2 py-0.5 bg-slate-900 text-white rounded text-[11px] font-bold">
                         {stu.actualStage}단계
                       </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {stu.hasRiskFlag && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-full font-bold text-[11px]">
-                          <AlertTriangle size={12} className="text-amber-600" />
-                          관심필요
-                        </span>
-                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <button
@@ -455,12 +522,158 @@ export default function TeacherDashboardView({ currentSession }) {
         </div>
       )}
 
+      {/* CREATE CLASS MODAL */}
+      {showCreateClassModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <School className="text-amber-500" size={18} />
+                신규 학급 개설
+              </h3>
+              <button onClick={() => setShowCreateClassModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+
+            {createClassMsg && (
+              <div className="mb-3 p-2.5 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-semibold border border-indigo-200">
+                {createClassMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateClassSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">개설할 학급 번호</label>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-700">5학년</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    required
+                    placeholder="예: 4"
+                    value={newClassNumberInput}
+                    onChange={(e) => setNewClassNumberInput(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-amber-500 font-bold"
+                  />
+                  <span className="font-bold text-slate-700">반</span>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md cursor-pointer"
+                >
+                  학급 개설 완료
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE STUDENT ACCOUNT MODAL */}
+      {showCreateStudentModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <UserPlus className="text-indigo-600" size={18} />
+                학생 계정 생성 및 아이디/비밀번호 부여
+              </h3>
+              <button onClick={() => setShowCreateStudentModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+
+            {createStudentMsg && (
+              <div className="mb-3 p-3 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-semibold border border-emerald-200">
+                {createStudentMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateStudentSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">소속 학급 선택</label>
+                <select
+                  value={studentForm.classNumber}
+                  onChange={(e) => setStudentForm({...studentForm, classNumber: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold"
+                >
+                  <option value="1">5학년 1반</option>
+                  <option value="2">5학년 2반</option>
+                  <option value="3">5학년 3반</option>
+                  <option value="4">5학년 4반 (새 학급)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">학생 이름</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="예: 정하늘"
+                    value={studentForm.name}
+                    onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">출석 번호</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="예: 21"
+                    value={studentForm.studentNumber}
+                    onChange={(e) => setStudentForm({...studentForm, studentNumber: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">부여할 학생 로그인 아이디 (ID)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="예: stu121"
+                  value={studentForm.username}
+                  onChange={(e) => setStudentForm({...studentForm, username: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">비밀번호</label>
+                <input
+                  type="text"
+                  required
+                  value={studentForm.password}
+                  onChange={(e) => setStudentForm({...studentForm, password: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md cursor-pointer"
+                >
+                  학생 계정 생성 및 공유 정보 발급
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* STUDENT DETAIL & TEACHER COMMENT MODAL */}
       {selectedStudentDetail && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8 animate-fadeIn">
-            
-            {/* Modal Header */}
             <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <SimdongiAvatar stage={selectedStudentDetail.actualStage} size="small" pulse={false} />
@@ -469,7 +682,7 @@ export default function TeacherDashboardView({ currentSession }) {
                     [{selectedStudentDetail.classNumber}반] {selectedStudentDetail.name} 학생 카드 결과 상세
                   </h3>
                   <p className="text-xs text-slate-400">
-                    {currentSession}차시 심박수 스크린샷, AI 채점 결과 및 교사 의견 전송
+                    로그인 ID: <code className="text-indigo-400 font-bold">{selectedStudentDetail.username}</code> | 비밀번호: <code className="text-indigo-400 font-bold">{selectedStudentDetail.password}</code>
                   </p>
                 </div>
               </div>
@@ -481,10 +694,7 @@ export default function TeacherDashboardView({ currentSession }) {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-              
-              {/* Risk Flag Banner if present */}
               {selectedStudentDetail.hasRiskFlag && (
                 <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex items-start gap-3">
                   <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
@@ -498,7 +708,6 @@ export default function TeacherDashboardView({ currentSession }) {
                 </div>
               )}
 
-              {/* Uploaded Screenshot & HR Extracted Data */}
               {(() => {
                 const currentHist = selectedStudentDetail.history.find(h => h.session === currentSession) || selectedStudentDetail.history[0];
                 return (
@@ -543,7 +752,6 @@ export default function TeacherDashboardView({ currentSession }) {
                       </div>
                     </div>
 
-                    {/* Student Answers Breakdown */}
                     <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
                       <p className="font-bold text-slate-800 text-sm mb-2">💬 챗봇 대화 내용 및 SEL 평가</p>
                       
@@ -565,7 +773,6 @@ export default function TeacherDashboardView({ currentSession }) {
                       </div>
                     </div>
 
-                    {/* Teacher Feedback Editor */}
                     <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-200 space-y-3">
                       <label className="block text-xs font-bold text-indigo-900 flex items-center gap-1.5">
                         <MessageSquare size={16} className="text-indigo-600" />
@@ -592,9 +799,7 @@ export default function TeacherDashboardView({ currentSession }) {
                   </>
                 );
               })()}
-
             </div>
-
           </div>
         </div>
       )}

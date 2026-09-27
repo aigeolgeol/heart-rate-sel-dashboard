@@ -60,7 +60,7 @@ let teachersStore = [
     password: 'teacher1234',
     name: '김선생 교사',
     school: '광주초등학교',
-    managedClasses: [1], // 5학년 1반
+    managedClasses: [1, 3], // 5학년 1반, 3반
     role: 'teacher'
   },
   {
@@ -94,8 +94,9 @@ const names = [
 function generateMockStudents() {
   const students = [];
   for (let i = 1; i <= 60; i++) {
-    const classNum = Math.ceil(i / 20); // Class 1, 2, 3
+    const classNum = Math.ceil(i / 20);
     const studentName = names[i - 1];
+    const sNumInClass = ((i - 1) % 20) + 1;
     
     const baseMaxBpm = 185 + Math.floor(Math.random() * 20);
     const baseRecoveryMin = 4.5 + Math.random() * 1.5;
@@ -160,10 +161,10 @@ function generateMockStudents() {
 
     students.push({
       id: `STU-${100 + i}`,
-      username: `stu${100 + i}`,
+      username: `stu${classNum}${sNumInClass.toString().padStart(2, '0')}`,
       password: `stu1234`,
       role: 'student',
-      studentNumber: i,
+      studentNumber: sNumInClass,
       classNumber: classNum,
       name: studentName,
       baseMaxBpm,
@@ -180,6 +181,11 @@ function generateMockStudents() {
 }
 
 let studentsStore = generateMockStudents();
+
+// Helper to get fresh teacher data
+function findTeacher(teacherIdOrUsername) {
+  return teachersStore.find(t => t.id === teacherIdOrUsername || t.username === teacherIdOrUsername);
+}
 
 // --- AUTH & USER MANAGEMENT APIs ---
 
@@ -282,14 +288,15 @@ app.post('/api/auth/register-teacher', (req, res) => {
     teacher: {
       id: newTeacher.id,
       username: newTeacher.username,
-      name: newTeacher.name
+      name: newTeacher.name,
+      managedClasses: []
     }
   });
 });
 
-// 3. TEACHER CREATE CLASS API
+// 3. TEACHER CREATE CLASS API WITH BATCH STUDENT GENERATION
 app.post('/api/teacher/classes', (req, res) => {
-  const { teacherId, classNumber, className } = req.body;
+  const { teacherId, classNumber, className, studentCount, studentNamesInput, defaultPassword } = req.body;
 
   if (!classNumber) {
     return res.status(400).json({ error: '학급 번호를 입력해 주세요.' });
@@ -310,17 +317,98 @@ app.post('/api/teacher/classes', (req, res) => {
 
   classesStore.push(newClass);
 
-  const teacher = teachersStore.find(t => t.id === teacherId);
+  const teacher = findTeacher(teacherId);
   if (teacher) {
     if (!teacher.managedClasses.includes(cNum)) {
       teacher.managedClasses.push(cNum);
     }
   }
 
-  res.json({ success: true, message: `${cNum}반 학급이 개설되었습니다!`, classInfo: newClass });
+  // Batch Student Generation if requested
+  const createdStudents = [];
+  const count = parseInt(studentCount || '0');
+  
+  if (count > 0) {
+    // Parse student names array or generate default names
+    let parsedNames = [];
+    if (studentNamesInput && studentNamesInput.trim()) {
+      parsedNames = studentNamesInput.split(/[\n,]+/).map(n => n.trim()).filter(n => n.length > 0);
+    }
+
+    const pass = defaultPassword || 'stu1234';
+
+    for (let i = 1; i <= count; i++) {
+      const sName = parsedNames[i - 1] || `학생${i}`;
+      const username = `stu${cNum}${i.toString().padStart(2, '0')}`;
+      
+      const baseMaxBpm = 185 + Math.floor(Math.random() * 15);
+      const history = [];
+
+      for (let s = 1; s <= 8; s++) {
+        history.push({
+          session: s,
+          date: `2026-10-${(10 + s * 4).toString().padStart(2, '0')}`,
+          hasSubmitted: s <= currentGlobalSession,
+          physicalScore: 40 + Math.floor(Math.random() * 8),
+          emotionalScore: 40 + Math.floor(Math.random() * 8),
+          totalScore: 80,
+          maxBpm: baseMaxBpm - 5,
+          avgBpm: 120,
+          minBpm: 70,
+          recoveryMinutes: "4.0",
+          screenshotUrl: '/uploads/sample_hr_1.svg',
+          activityLog: '수업 참여 및 운동',
+          spikeMoment: '체육 시간오래달리기',
+          situation: '열심히 오래달리기를 함',
+          mood: '뿌듯함',
+          regulationStrategy: '4초 복식호흡 시도',
+          expressSummary: '오늘도 힘차게 하루를 보냄',
+          scores: { recognize: 8, regulate: 8, express: 8 },
+          aiAdvice: '신체 신호에 맞춰 조절 전략을 잘 활용했습니다!',
+          teacherComment: ''
+        });
+      }
+
+      const newStudent = {
+        id: `STU-${cNum * 100 + i}`,
+        username,
+        password: pass,
+        role: 'student',
+        studentNumber: i,
+        classNumber: cNum,
+        name: sName,
+        baseMaxBpm,
+        actualStage: 3,
+        visibleStage: currentGlobalSession >= 8 ? 3 : 1,
+        currentScore: 80,
+        physicalScore: 40,
+        emotionalScore: 40,
+        hasRiskFlag: false,
+        history
+      };
+
+      studentsStore.push(newStudent);
+      createdStudents.push(newStudent);
+    }
+
+    newClass.studentCount = count;
+  }
+
+  res.json({ 
+    success: true, 
+    message: `${cNum}반 학급이 개설되었습니다! ${createdStudents.length > 0 ? `(학생 ${createdStudents.length}명 일괄 계정 생성을 완료하였습니다)` : ''}`, 
+    classInfo: newClass,
+    teacherManagedClasses: teacher ? teacher.managedClasses : [cNum],
+    createdStudents: createdStudents.map(s => ({
+      studentNumber: s.studentNumber,
+      name: s.name,
+      username: s.username,
+      password: s.password
+    }))
+  });
 });
 
-// 4. TEACHER CREATE STUDENT ACCOUNT API
+// 4. TEACHER CREATE SINGLE STUDENT ACCOUNT API
 app.post('/api/teacher/create-student', (req, res) => {
   const { teacherId, classNumber, name, studentNumber, username, password } = req.body;
 
@@ -365,7 +453,7 @@ app.post('/api/teacher/create-student', (req, res) => {
   }
 
   const newStudent = {
-    id: `STU-${100 + studentsStore.length + 1}`,
+    id: `STU-${cNum * 100 + sNum}`,
     username,
     password,
     role: 'student',
@@ -490,7 +578,7 @@ app.delete('/api/admin/classes/:classNumber', (req, res) => {
   res.status(404).json({ error: '해당 학급을 찾을 수 없습니다.' });
 });
 
-// --- EXISTING CORE DASHBOARD APIs ---
+// --- DASHBOARD APIs WITH TEACHER CLASS DATA ISOLATION ---
 
 app.get('/api/settings', (req, res) => {
   res.json({
@@ -697,10 +785,19 @@ app.post('/api/submit-chat', async (req, res) => {
   }
 });
 
-// Get all students
+// GET STUDENTS (WITH DATA ISOLATION FOR TEACHERS)
 app.get('/api/students', (req, res) => {
-  const { classNum, hasRisk, session } = req.query;
+  const { classNum, hasRisk, session, teacherId } = req.query;
   let list = studentsStore;
+
+  // If teacherId is passed, restrict to classes managed by that teacher
+  if (teacherId) {
+    const teacher = findTeacher(teacherId);
+    if (teacher) {
+      const allowed = teacher.managedClasses || [];
+      list = list.filter(s => allowed.includes(s.classNumber));
+    }
+  }
 
   if (classNum && classNum !== 'all') {
     list = list.filter(s => s.classNumber === parseInt(classNum));
@@ -762,10 +859,22 @@ app.post('/api/teacher-feedback', (req, res) => {
   res.json({ success: true, message: "교사 의견이 전송되었습니다.", comment });
 });
 
-// Get Class Statistics Dashboard Data
+// GET CLASS STATS (WITH TEACHER ISOLATION)
 app.get('/api/class-stats', (req, res) => {
-  const classNum = req.query.classNum ? parseInt(req.query.classNum) : null;
-  const filtered = classNum ? studentsStore.filter(s => s.classNumber === classNum) : studentsStore;
+  const { classNum, teacherId } = req.query;
+  let filtered = studentsStore;
+
+  if (teacherId) {
+    const teacher = findTeacher(teacherId);
+    if (teacher) {
+      const allowed = teacher.managedClasses || [];
+      filtered = filtered.filter(s => allowed.includes(s.classNumber));
+    }
+  }
+
+  if (classNum && classNum !== 'all') {
+    filtered = filtered.filter(s => s.classNumber === parseInt(classNum));
+  }
 
   const totalCount = filtered.length;
   const submittedCount = filtered.filter(s => s.history[currentGlobalSession - 1]?.hasSubmitted).length;

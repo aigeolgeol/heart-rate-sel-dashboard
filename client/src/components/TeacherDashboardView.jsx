@@ -18,15 +18,21 @@ import {
   UserPlus,
   PlusCircle,
   School,
-  Key
+  Key,
+  Copy,
+  FileSpreadsheet,
+  Zap
 } from 'lucide-react';
 import SimdongiAvatar from './SimdongiAvatar';
 
 export default function TeacherDashboardView({ currentSession, currentUser }) {
-  const [selectedClass, setSelectedClass] = useState('all');
+  const teacherId = currentUser ? currentUser.id : 'TCH-101';
+  const managedClasses = currentUser && currentUser.managedClasses ? currentUser.managedClasses : [1];
+
+  const [selectedClass, setSelectedClass] = useState(managedClasses.length > 0 ? managedClasses[0].toString() : 'all');
   const [riskFilterOnly, setRiskFilterOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [displayMode, setDisplayMode] = useState('card'); // 'card' | 'table'
+  const [displayMode, setDisplayMode] = useState('card');
   
   const [stats, setStats] = useState(null);
   const [students, setStudents] = useState([]);
@@ -36,15 +42,23 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
   const [teacherCommentInput, setTeacherCommentInput] = useState('');
   const [sendingComment, setSendingComment] = useState(false);
 
-  // Class Creation Modal state
+  // Class Creation & Batch Student Modal state
   const [showCreateClassModal, setShowCreateClassModal] = useState(false);
-  const [newClassNumberInput, setNewClassNumberInput] = useState('');
+  const [newClassNumberInput, setNewClassNumberInput] = useState('4');
+  const [enableBatchStudents, setEnableBatchStudents] = useState(true);
+  const [batchStudentCount, setBatchStudentCount] = useState(20);
+  const [studentNamesInput, setStudentNamesInput] = useState('');
+  const [defaultPassword, setDefaultPassword] = useState('stu1234');
   const [createClassMsg, setCreateClassMsg] = useState('');
 
-  // Student Account Creation Modal state
+  // Generated Roster Modal (for easy sharing)
+  const [rosterData, setRosterData] = useState(null); // { classNumber, students: [...] }
+  const [copiedRoster, setCopiedRoster] = useState(false);
+
+  // Single Student Account Creation Modal state
   const [showCreateStudentModal, setShowCreateStudentModal] = useState(false);
   const [studentForm, setStudentForm] = useState({
-    classNumber: '1',
+    classNumber: managedClasses.length > 0 ? managedClasses[0].toString() : '1',
     name: '',
     studentNumber: '21',
     username: '',
@@ -52,15 +66,15 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
   });
   const [createStudentMsg, setCreateStudentMsg] = useState('');
 
-  // Fetch Class Stats & Students List
+  // Fetch Class Stats & Students List (WITH TEACHER DATA ISOLATION)
   const fetchData = async () => {
     setLoading(true);
     try {
-      const statsRes = await fetch(`/api/class-stats?classNum=${selectedClass === 'all' ? '' : selectedClass}`);
+      const statsRes = await fetch(`/api/class-stats?classNum=${selectedClass}&teacherId=${teacherId}`);
       const statsData = await statsRes.json();
       setStats(statsData);
 
-      const stuRes = await fetch(`/api/students?classNum=${selectedClass}&hasRisk=${riskFilterOnly}&session=${currentSession}`);
+      const stuRes = await fetch(`/api/students?classNum=${selectedClass}&hasRisk=${riskFilterOnly}&session=${currentSession}&teacherId=${teacherId}`);
       const stuData = await stuRes.json();
       setStudents(stuData.students);
     } catch (err) {
@@ -72,7 +86,7 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
 
   useEffect(() => {
     fetchData();
-  }, [selectedClass, riskFilterOnly, currentSession]);
+  }, [selectedClass, riskFilterOnly, currentSession, teacherId]);
 
   // Open Student Detail Modal
   const handleOpenDetail = async (studentId) => {
@@ -114,7 +128,17 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
     }
   };
 
-  // Create New Class Handler
+  // Fill sample student names
+  const handleFillSampleNames = () => {
+    const sampleList = [
+      "김도현", "이서아", "박민성", "최예린", "정우진", "강지유", "조윤서", "윤태양", "장하람", "임채원",
+      "한지율", "오동현", "서아린", "신재민", "권유나", "황승우", "송다은", "류건우", "전소민", "홍진우"
+    ];
+    setStudentNamesInput(sampleList.join('\n'));
+    setBatchStudentCount(sampleList.length);
+  };
+
+  // Submit Create Class (with Optional Batch Student Creation)
   const handleCreateClassSubmit = async (e) => {
     e.preventDefault();
     setCreateClassMsg('');
@@ -123,19 +147,33 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          teacherId: currentUser ? currentUser.id : 'TCH-101',
+          teacherId,
           classNumber: newClassNumberInput,
-          className: `5학년 ${newClassNumberInput}반`
+          className: `5학년 ${newClassNumberInput}반`,
+          studentCount: enableBatchStudents ? batchStudentCount : 0,
+          studentNamesInput: enableBatchStudents ? studentNamesInput : '',
+          defaultPassword
         })
       });
 
       const data = await res.json();
       if (data.success) {
         setCreateClassMsg(data.message);
+        
+        // Show Generated Roster Modal if batch students were created
+        if (data.createdStudents && data.createdStudents.length > 0) {
+          setRosterData({
+            classNumber: newClassNumberInput,
+            students: data.createdStudents
+          });
+        }
+
         setTimeout(() => {
           setShowCreateClassModal(false);
           setNewClassNumberInput('');
+          setStudentNamesInput('');
           setCreateClassMsg('');
+          setSelectedClass(newClassNumberInput.toString());
           fetchData();
         }, 1200);
       } else {
@@ -146,7 +184,7 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
     }
   };
 
-  // Create Student Account Handler
+  // Create Single Student Account
   const handleCreateStudentSubmit = async (e) => {
     e.preventDefault();
     setCreateStudentMsg('');
@@ -155,7 +193,7 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          teacherId: currentUser ? currentUser.id : 'TCH-101',
+          teacherId,
           ...studentForm
         })
       });
@@ -165,7 +203,7 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
         setCreateStudentMsg(data.message);
         setTimeout(() => {
           setShowCreateStudentModal(false);
-          setStudentForm({ classNumber: '1', name: '', studentNumber: '21', username: '', password: 'stu1234' });
+          setStudentForm({ classNumber: managedClasses[0] ? managedClasses[0].toString() : '1', name: '', studentNumber: '21', username: '', password: 'stu1234' });
           setCreateStudentMsg('');
           fetchData();
         }, 1500);
@@ -175,6 +213,17 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
     } catch (err) {
       setCreateStudentMsg('서버 오류');
     }
+  };
+
+  // Copy Roster to Clipboard
+  const handleCopyRosterText = () => {
+    if (!rosterData) return;
+    const text = `[5학년 ${rosterData.classNumber}반 학생 계정 공유 명렬표]\n` +
+      rosterData.students.map(s => `${s.studentNumber}번 ${s.name} - 아이디: ${s.username} / 비밀번호: ${s.password}`).join('\n');
+    
+    navigator.clipboard.writeText(text);
+    setCopiedRoster(true);
+    setTimeout(() => setCopiedRoster(false), 2000);
   };
 
   const filteredStudents = students.filter(s => 
@@ -196,18 +245,18 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            학급 개설, 학생 아이디/비밀번호 생성 및 공유, 정서 이상징후 모니터링
+            담당 학급 모니터링 (내 학급 전용 데이터 격리), 학급 일괄 개설 및 계정 명렬표 부여
           </p>
         </div>
 
-        {/* Action Buttons: Create Class & Create Student */}
+        {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowCreateClassModal(true)}
             className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <PlusCircle size={15} className="text-amber-400" />
-            <span>신규 학급 개설</span>
+            <Zap size={15} className="text-amber-400" />
+            <span>학급 일괄 개설 &amp; 학생 일괄 생성</span>
           </button>
 
           <button
@@ -215,26 +264,35 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
             className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <UserPlus size={15} />
-            <span>학생 계정 생성 &amp; 부여</span>
+            <span>개별 학생 계정 추가</span>
           </button>
         </div>
       </div>
 
-      {/* Class Filter Tabs */}
+      {/* Class Filter Tabs (ISOLATED TO TEACHER'S MANAGED CLASSES) */}
       <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200">
-        <span className="text-xs font-bold text-slate-700 ml-2">조회 학급:</span>
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-bold text-slate-700 ml-2">담당 학급 선택:</span>
+          {managedClasses.length === 0 && (
+            <span className="text-xs text-rose-500 font-semibold">아직 개설된 학급이 없습니다. 오른쪽 상단 버튼으로 학급을 개설해 보세요!</span>
+          )}
+        </div>
+
         <div className="flex items-center space-x-1.5">
-          <button
-            onClick={() => setSelectedClass('all')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              selectedClass === 'all'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            전체 학급
-          </button>
-          {[1, 2, 3].map(cNum => (
+          {managedClasses.length > 1 && (
+            <button
+              onClick={() => setSelectedClass('all')}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                selectedClass === 'all'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              내 전체 학급 ({managedClasses.map(c => `${c}반`).join(', ')})
+            </button>
+          )}
+
+          {managedClasses.map(cNum => (
             <button
               key={cNum}
               onClick={() => setSelectedClass(cNum.toString())}
@@ -522,14 +580,14 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
         </div>
       )}
 
-      {/* CREATE CLASS MODAL */}
+      {/* CREATE CLASS & BATCH STUDENT MODAL */}
       {showCreateClassModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn my-8">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <School className="text-amber-500" size={18} />
-                신규 학급 개설
+                <Zap className="text-amber-500" size={18} />
+                신규 학급 개설 &amp; 학생 일괄 생성
               </h3>
               <button onClick={() => setShowCreateClassModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X size={18} />
@@ -542,9 +600,9 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
               </div>
             )}
 
-            <form onSubmit={handleCreateClassSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateClassSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-800 mb-1">개설할 학급 번호</label>
+                <label className="block font-bold text-slate-800 mb-1">1. 개설할 학급 번호</label>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-slate-700">5학년</span>
                   <input
@@ -561,12 +619,74 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
                 </div>
               </div>
 
+              {/* Batch student option toggle */}
+              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-indigo-900 flex items-center gap-1.5 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={enableBatchStudents} 
+                      onChange={(e) => setEnableBatchStudents(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded"
+                    />
+                    ⚡ 학급 학생 계정 일괄 자동 생성 (추천)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleFillSampleNames}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 underline font-semibold"
+                  >
+                    + 20명 예시 이름 채우기
+                  </button>
+                </div>
+
+                {enableBatchStudents && (
+                  <div className="space-y-3 pt-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">학급 학생 수</label>
+                        <input 
+                          type="number"
+                          min="1"
+                          max="40"
+                          value={batchStudentCount}
+                          onChange={(e) => setBatchStudentCount(Number(e.target.value))}
+                          className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-slate-900 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">기본 비밀번호 지정</label>
+                        <input 
+                          type="text"
+                          value={defaultPassword}
+                          onChange={(e) => setDefaultPassword(e.target.value)}
+                          className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-slate-900 font-bold text-rose-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        학생 이름 목록 (줄바꿈 또는 쉼표 구분)
+                      </label>
+                      <textarea
+                        rows={4}
+                        placeholder="예:&#10;김도현&#10;이서아&#10;박민성 (비워두면 학생1, 학생2로 자동 부여됩니다)"
+                        value={studentNamesInput}
+                        onChange={(e) => setStudentNamesInput(e.target.value)}
+                        className="w-full bg-white border border-indigo-200 rounded-xl p-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-medium"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md cursor-pointer"
+                  className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md cursor-pointer text-sm"
                 >
-                  학급 개설 완료
+                  학급 개설 &amp; 학생 일괄 생성 완료
                 </button>
               </div>
             </form>
@@ -574,14 +694,77 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
         </div>
       )}
 
-      {/* CREATE STUDENT ACCOUNT MODAL */}
+      {/* GENERATED ROSTER SHARING MODAL */}
+      {rosterData && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn my-8">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="text-emerald-600" size={22} />
+                <h3 className="text-lg font-bold text-slate-900">
+                  5학년 {rosterData.classNumber}반 학생 계정 명렬표 (공유용)
+                </h3>
+              </div>
+              <button onClick={() => setRosterData(null)} className="text-slate-400 hover:text-slate-700">
+                <X size={20} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-4">
+              아래 생성된 학생 아이디와 비밀번호 목록을 복사하여 학생들과 공유해 주세요.
+            </p>
+
+            {/* Roster Table */}
+            <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-2xl mb-4 text-xs">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 font-bold border-b border-slate-200 text-slate-700">
+                    <th className="py-2 px-3">출석번호</th>
+                    <th className="py-2 px-3">이름</th>
+                    <th className="py-2 px-3">로그인 아이디</th>
+                    <th className="py-2 px-3">비밀번호</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 font-medium">
+                  {rosterData.students.map(s => (
+                    <tr key={s.studentNumber} className="hover:bg-slate-50">
+                      <td className="py-2 px-3 font-bold text-slate-500">{s.studentNumber}번</td>
+                      <td className="py-2 px-3 font-bold text-slate-900">{s.name}</td>
+                      <td className="py-2 px-3 font-bold text-indigo-600">{s.username}</td>
+                      <td className="py-2 px-3 font-bold text-rose-600">{s.password}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={handleCopyRosterText}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <Copy size={15} />
+                <span>{copiedRoster ? '명렬표 전체 복사 완료!' : '명렬표 전체 클립보드 복사'}</span>
+              </button>
+              <button
+                onClick={() => setRosterData(null)}
+                className="px-4 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl cursor-pointer"
+              >
+                확인 완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SINGLE STUDENT CREATION MODAL */}
       {showCreateStudentModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <UserPlus className="text-indigo-600" size={18} />
-                학생 계정 생성 및 아이디/비밀번호 부여
+                개별 학생 계정 생성 및 부여
               </h3>
               <button onClick={() => setShowCreateStudentModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X size={18} />
@@ -602,10 +785,9 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
                   onChange={(e) => setStudentForm({...studentForm, classNumber: e.target.value})}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-indigo-500 font-bold"
                 >
-                  <option value="1">5학년 1반</option>
-                  <option value="2">5학년 2반</option>
-                  <option value="3">5학년 3반</option>
-                  <option value="4">5학년 4반 (새 학급)</option>
+                  {managedClasses.map(c => (
+                    <option key={c} value={c}>5학년 {c}반</option>
+                  ))}
                 </select>
               </div>
 
@@ -662,7 +844,7 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
                   type="submit"
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md cursor-pointer"
                 >
-                  학생 계정 생성 및 공유 정보 발급
+                  학생 계정 생성 완료
                 </button>
               </div>
             </form>

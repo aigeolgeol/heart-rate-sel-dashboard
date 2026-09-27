@@ -39,7 +39,13 @@ const genAI = process.env.GEMINI_API_KEY
   ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) 
   : null;
 
-// --- IN-MEMORY DATABASE WITH ACCOUNTS & ROLES ---
+// --- DATA PERSISTENCE WITH JSON FILE DB ---
+const dataDir = path.join(__dirname, 'data');
+const dbFilePath = path.join(dataDir, 'db.json');
+
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
 
 let currentGlobalSession = 4; // 1~8 sessions
 
@@ -52,36 +58,7 @@ const adminAccount = {
   role: 'admin'
 };
 
-// Teacher Accounts Store
-let teachersStore = [
-  {
-    id: 'TCH-101',
-    username: 'teacher1',
-    password: 'teacher1234',
-    name: '김선생 교사',
-    school: '광주초등학교',
-    managedClasses: [1, 3], // 5학년 1반, 3반
-    role: 'teacher'
-  },
-  {
-    id: 'TCH-102',
-    username: 'teacher2',
-    password: 'teacher1234',
-    name: '이선생 교사',
-    school: '광주초등학교',
-    managedClasses: [2], // 5학년 2반
-    role: 'teacher'
-  }
-];
-
-// Classes Store
-let classesStore = [
-  { classNumber: 1, name: '5학년 1반', teacherId: 'TCH-101', studentCount: 20 },
-  { classNumber: 2, name: '5학년 2반', teacherId: 'TCH-102', studentCount: 20 },
-  { classNumber: 3, name: '5학년 3반', teacherId: 'TCH-101', studentCount: 20 }
-];
-
-// Seed names
+// Seed names for initial mock data
 const names = [
   "김민준", "이서연", "박도윤", "최지우", "정현우", "강예은", "조성민", "윤서아", "장하준", "임수아",
   "한지민", "오건우", "서윤아", "신준서", "권지안", "황민재", "송하은", "류도현", "전소율", "홍성현",
@@ -180,7 +157,75 @@ function generateMockStudents() {
   return students;
 }
 
-let studentsStore = generateMockStudents();
+// Stores
+let teachersStore = [];
+let classesStore = [];
+let studentsStore = [];
+
+function loadDatabase() {
+  try {
+    if (fs.existsSync(dbFilePath)) {
+      const fileData = fs.readFileSync(dbFilePath, 'utf-8');
+      const json = JSON.parse(fileData);
+      teachersStore = json.teachersStore || [];
+      classesStore = json.classesStore || [];
+      studentsStore = json.studentsStore || [];
+      currentGlobalSession = json.currentGlobalSession || 4;
+      console.log('📦 Database loaded successfully from db.json');
+      return;
+    }
+  } catch (err) {
+    console.error('Error loading db.json, generating default seed data:', err);
+  }
+
+  // Seed default data if no DB file
+  teachersStore = [
+    {
+      id: 'TCH-101',
+      username: 'teacher1',
+      password: 'teacher1234',
+      name: '김선생 교사',
+      school: '광주초등학교',
+      managedClasses: [1, 3],
+      role: 'teacher'
+    },
+    {
+      id: 'TCH-102',
+      username: 'teacher2',
+      password: 'teacher1234',
+      name: '이선생 교사',
+      school: '광주초등학교',
+      managedClasses: [2],
+      role: 'teacher'
+    }
+  ];
+
+  classesStore = [
+    { classNumber: 1, name: '5학년 1반', teacherId: 'TCH-101', studentCount: 20 },
+    { classNumber: 2, name: '5학년 2반', teacherId: 'TCH-102', studentCount: 20 },
+    { classNumber: 3, name: '5학년 3반', teacherId: 'TCH-101', studentCount: 20 }
+  ];
+
+  studentsStore = generateMockStudents();
+  saveDatabase();
+}
+
+function saveDatabase() {
+  try {
+    const dataToSave = {
+      teachersStore,
+      classesStore,
+      studentsStore,
+      currentGlobalSession
+    };
+    fs.writeFileSync(dbFilePath, JSON.stringify(dataToSave, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving db.json:', err);
+  }
+}
+
+// Initial Data Load
+loadDatabase();
 
 // Helper to get fresh teacher data
 function findTeacher(teacherIdOrUsername) {
@@ -281,6 +326,7 @@ app.post('/api/auth/register-teacher', (req, res) => {
   };
 
   teachersStore.push(newTeacher);
+  saveDatabase();
 
   res.json({
     success: true,
@@ -329,7 +375,6 @@ app.post('/api/teacher/classes', (req, res) => {
   const count = parseInt(studentCount || '0');
   
   if (count > 0) {
-    // Parse student names array or generate default names
     let parsedNames = [];
     if (studentNamesInput && studentNamesInput.trim()) {
       parsedNames = studentNamesInput.split(/[\n,]+/).map(n => n.trim()).filter(n => n.length > 0);
@@ -393,6 +438,8 @@ app.post('/api/teacher/classes', (req, res) => {
 
     newClass.studentCount = count;
   }
+
+  saveDatabase();
 
   res.json({ 
     success: true, 
@@ -475,6 +522,8 @@ app.post('/api/teacher/create-student', (req, res) => {
   const cls = classesStore.find(c => c.classNumber === cNum);
   if (cls) cls.studentCount += 1;
 
+  saveDatabase();
+
   res.json({
     success: true,
     message: `${name} 학생 계정이 생성되었습니다! (아이디: ${username} / 비밀번호: ${password})`,
@@ -485,6 +534,27 @@ app.post('/api/teacher/create-student', (req, res) => {
       classNumber: newStudent.classNumber,
       studentNumber: newStudent.studentNumber
     }
+  });
+});
+
+// 4-1. TEACHER UPDATE STUDENT PASSWORD API
+app.post('/api/teacher/update-student-password', (req, res) => {
+  const { username, newPassword } = req.body;
+  if (!username || !newPassword) {
+    return res.status(400).json({ error: '학생 아이디와 새 비밀번호를 입력해 주세요.' });
+  }
+
+  const student = studentsStore.find(s => s.username === username || s.id === username);
+  if (!student) {
+    return res.status(404).json({ error: '해당 학생 계정을 찾을 수 없습니다.' });
+  }
+
+  student.password = newPassword;
+  saveDatabase();
+
+  res.json({
+    success: true,
+    message: `${student.name} 학생의 비밀번호가 성공적으로 변경되었습니다.`
   });
 });
 
@@ -508,6 +578,7 @@ app.get('/api/admin/overview', (req, res) => {
     students: studentsStore.map(s => ({
       id: s.id,
       username: s.username,
+      password: s.password,
       name: s.name,
       classNumber: s.classNumber,
       studentNumber: s.studentNumber,
@@ -529,12 +600,14 @@ app.post('/api/admin/reset-password', (req, res) => {
     const teacher = teachersStore.find(t => t.id === userId || t.username === userId);
     if (teacher) {
       teacher.password = newPassword;
+      saveDatabase();
       return res.json({ success: true, message: `교사 [${teacher.name}]의 비밀번호가 변경되었습니다.` });
     }
   } else if (userRole === 'student') {
     const student = studentsStore.find(s => s.id === userId || s.username === userId);
     if (student) {
       student.password = newPassword;
+      saveDatabase();
       return res.json({ success: true, message: `학생 [${student.name}]의 비밀번호가 변경되었습니다.` });
     }
   }
@@ -549,6 +622,7 @@ app.delete('/api/admin/teachers/:id', (req, res) => {
   teachersStore = teachersStore.filter(t => t.id !== teacherId && t.username !== teacherId);
 
   if (teachersStore.length < initialCount) {
+    saveDatabase();
     return res.json({ success: true, message: '교사 계정이 삭제되었습니다.' });
   }
   res.status(404).json({ error: '해당 교사 계정을 찾을 수 없습니다.' });
@@ -561,6 +635,7 @@ app.delete('/api/admin/students/:id', (req, res) => {
   studentsStore = studentsStore.filter(s => s.id !== studentId && s.username !== studentId);
 
   if (studentsStore.length < initialCount) {
+    saveDatabase();
     return res.json({ success: true, message: '학생 계정이 삭제되었습니다.' });
   }
   res.status(404).json({ error: '해당 학생 계정을 찾을 수 없습니다.' });
@@ -573,9 +648,31 @@ app.delete('/api/admin/classes/:classNumber', (req, res) => {
   classesStore = classesStore.filter(c => c.classNumber !== cNum);
 
   if (classesStore.length < initialCount) {
+    // Also update teachers' managedClasses
+    teachersStore.forEach(t => {
+      t.managedClasses = t.managedClasses.filter(c => c !== cNum);
+    });
+    saveDatabase();
     return res.json({ success: true, message: `${cNum}반 학급이 삭제되었습니다.` });
   }
   res.status(404).json({ error: '해당 학급을 찾을 수 없습니다.' });
+});
+
+// 10. TEACHER CLASS CSV EXPORT API
+app.get('/api/teacher/classes/:classNumber/export-csv', (req, res) => {
+  const cNum = parseInt(req.params.classNumber);
+  const classStudents = studentsStore.filter(s => s.classNumber === cNum).sort((a, b) => a.studentNumber - b.studentNumber);
+
+  let csvContent = "\uFEFF"; // UTF-8 BOM for Excel compatibility in Korean
+  csvContent += "학급,번호,이름,아이디,비밀번호\n";
+  
+  classStudents.forEach(s => {
+    csvContent += `5학년 ${cNum}반,${s.studentNumber},"${s.name}","${s.username}","${s.password}"\n`;
+  });
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename=class_${cNum}_students.csv`);
+  res.send(csvContent);
 });
 
 // --- DASHBOARD APIs WITH TEACHER CLASS DATA ISOLATION ---
@@ -770,6 +867,7 @@ app.post('/api/submit-chat', async (req, res) => {
       else student.actualStage = 1;
 
       student.visibleStage = currentGlobalSession >= 8 ? student.actualStage : 1;
+      saveDatabase();
     }
 
     res.json({

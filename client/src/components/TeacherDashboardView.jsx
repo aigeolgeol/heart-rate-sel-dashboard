@@ -226,6 +226,40 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
     setTimeout(() => setCopiedRoster(false), 2000);
   };
 
+  // Download CSV
+  const handleDownloadCSV = (classNum) => {
+    const targetClass = classNum || (selectedClass !== 'all' ? selectedClass : (managedClasses[0] || 1));
+    window.open(`/api/teacher/classes/${targetClass}/export-csv`, '_blank');
+  };
+
+  // Student Password Edit Modal State
+  const [editPasswordModal, setEditPasswordModal] = useState({ open: false, student: null, newPassword: '' });
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (!editPasswordModal.newPassword || !editPasswordModal.student) return;
+    try {
+      const res = await fetch('/api/teacher/update-student-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: editPasswordModal.student.username,
+          newPassword: editPasswordModal.newPassword
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message);
+        setEditPasswordModal({ open: false, student: null, newPassword: '' });
+        fetchData();
+      } else {
+        alert(data.error);
+      }
+    } catch (err) {
+      alert('비밀번호 변경 실패');
+    }
+  };
+
   const filteredStudents = students.filter(s => 
     s.name.includes(searchQuery) || s.studentNumber.toString().includes(searchQuery)
   );
@@ -252,11 +286,20 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => handleDownloadCSV()}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="현재 학급 명렬표를 CSV 엑셀 파일로 다운로드합니다."
+          >
+            <FileSpreadsheet size={15} />
+            <span>명렬표 CSV 다운로드</span>
+          </button>
+
+          <button
             onClick={() => setShowCreateClassModal(true)}
             className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Zap size={15} className="text-amber-400" />
-            <span>학급 일괄 개설 &amp; 학생 일괄 생성</span>
+            <span>학급 개설 &amp; 학생 일괄 생성</span>
           </button>
 
           <button
@@ -264,7 +307,7 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
             className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <UserPlus size={15} />
-            <span>개별 학생 계정 추가</span>
+            <span>개별 학생 추가</span>
           </button>
         </div>
       </div>
@@ -508,13 +551,22 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
                 </div>
               </div>
 
-              <div className="mt-5 pt-3 border-t border-slate-100">
+              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  onClick={() => setEditPasswordModal({ open: true, student: stu, newPassword: '' })}
+                  className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                  title="학생 비밀번호 변경"
+                >
+                  <Key size={14} className="text-indigo-600" />
+                  <span>비밀번호</span>
+                </button>
+
                 <button
                   onClick={() => handleOpenDetail(stu.id)}
-                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Eye size={15} />
-                  <span>학생 상세 카드 &amp; 교사 피드백 작성</span>
+                  <span>학생 상세 &amp; 피드백</span>
                 </button>
               </div>
 
@@ -564,13 +616,23 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => handleOpenDetail(stu.id)}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 mx-auto transition-colors"
-                      >
-                        <Eye size={14} />
-                        <span>확인</span>
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => setEditPasswordModal({ open: true, student: stu, newPassword: '' })}
+                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg flex items-center gap-1 transition-colors"
+                          title="학생 비밀번호 변경"
+                        >
+                          <Key size={13} className="text-indigo-600" />
+                          <span>비번</span>
+                        </button>
+                        <button
+                          onClick={() => handleOpenDetail(stu.id)}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-sm flex items-center gap-1 transition-colors"
+                        >
+                          <Eye size={13} />
+                          <span>확인</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -738,13 +800,20 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
               </table>
             </div>
 
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                onClick={() => handleDownloadCSV(rosterData.classNumber)}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileSpreadsheet size={15} />
+                <span>CSV 엑셀 저장</span>
+              </button>
               <button
                 onClick={handleCopyRosterText}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
               >
                 <Copy size={15} />
-                <span>{copiedRoster ? '명렬표 전체 복사 완료!' : '명렬표 전체 클립보드 복사'}</span>
+                <span>{copiedRoster ? '복사 완료!' : '명렬표 전체 복사'}</span>
               </button>
               <button
                 onClick={() => setRosterData(null)}
@@ -982,6 +1051,66 @@ export default function TeacherDashboardView({ currentSession, currentUser }) {
                 );
               })()}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* STUDENT PASSWORD EDIT MODAL */}
+      {editPasswordModal.open && editPasswordModal.student && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Key size={18} className="text-indigo-600" />
+                학생 비밀번호 변경 ({editPasswordModal.student.name})
+              </h3>
+              <button
+                onClick={() => setEditPasswordModal({ open: false, student: null, newPassword: '' })}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdatePassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">학생 아이디 (ID)</label>
+                <input
+                  type="text"
+                  disabled
+                  value={editPasswordModal.student.username}
+                  className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">새로운 비밀번호 입력</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="예: stu5678"
+                  value={editPasswordModal.newPassword}
+                  onChange={(e) => setEditPasswordModal({ ...editPasswordModal, newPassword: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="pt-2 flex space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setEditPasswordModal({ open: false, student: null, newPassword: '' })}
+                  className="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+                >
+                  비밀번호 변경 저장
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

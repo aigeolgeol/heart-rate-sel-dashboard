@@ -7,7 +7,10 @@
     },
     {
       "src": "client/package.json",
-      "use": "@vercel/vite"
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
   ],
   "routes": [
@@ -18,9 +21,6 @@
     {
       "src": "/uploads/(.*)",
       "dest": "server/uploads/$1"
-    },
-    {
-      "handle": "filesystem"
     },
     {
       "src": "/(.*)",

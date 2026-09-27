@@ -183,7 +183,7 @@ let studentsStore = generateMockStudents();
 
 // --- AUTH & USER MANAGEMENT APIs ---
 
-// 1. LOGIN API (Student / Teacher / Admin)
+// 1. LOGIN API
 app.post('/api/auth/login', (req, res) => {
   const { username, password, role } = req.body;
 
@@ -251,15 +251,14 @@ app.post('/api/auth/login', (req, res) => {
   res.status(400).json({ error: '유효한 로그인 역할(Role)을 지정해 주세요.' });
 });
 
-// 2. TEACHER REGISTER API (Self Signup before login)
+// 2. TEACHER REGISTER API
 app.post('/api/auth/register-teacher', (req, res) => {
   const { username, password, name, school } = req.body;
 
   if (!username || !password || !name) {
-    return res.status(400).json({ error: '모든 필수 항목(아이디, 비밀번호, 성함)을 입력해 주세요.' });
+    return res.status(400).json({ error: '모든 필수 항목을 입력해 주세요.' });
   }
 
-  // Check duplicate username
   const existingTeacher = teachersStore.find(t => t.username === username);
   if (existingTeacher) {
     return res.status(400).json({ error: '이미 존재해 사용 중인 아이디입니다.' });
@@ -311,7 +310,6 @@ app.post('/api/teacher/classes', (req, res) => {
 
   classesStore.push(newClass);
 
-  // Update teacher's managedClasses
   const teacher = teachersStore.find(t => t.id === teacherId);
   if (teacher) {
     if (!teacher.managedClasses.includes(cNum)) {
@@ -327,13 +325,12 @@ app.post('/api/teacher/create-student', (req, res) => {
   const { teacherId, classNumber, name, studentNumber, username, password } = req.body;
 
   if (!name || !studentNumber || !username || !password) {
-    return res.status(400).json({ error: '모든 항목(이름, 출석번호, 아이디, 비밀번호)을 입력해 주세요.' });
+    return res.status(400).json({ error: '모든 항목을 입력해 주세요.' });
   }
 
   const cNum = parseInt(classNumber);
   const sNum = parseInt(studentNumber);
 
-  // Duplicate check
   const existingUser = studentsStore.find(s => s.username === username);
   if (existingUser) {
     return res.status(400).json({ error: '이미 다른 학생이 사용 중인 아이디입니다.' });
@@ -387,7 +384,6 @@ app.post('/api/teacher/create-student', (req, res) => {
 
   studentsStore.push(newStudent);
 
-  // Increment class student count
   const cls = classesStore.find(c => c.classNumber === cNum);
   if (cls) cls.studentCount += 1;
 
@@ -404,7 +400,7 @@ app.post('/api/teacher/create-student', (req, res) => {
   });
 });
 
-// 5. ADMIN OVERVIEW & USER LIST API
+// 5. ADMIN OVERVIEW API
 app.get('/api/admin/overview', (req, res) => {
   res.json({
     stats: {
@@ -456,6 +452,42 @@ app.post('/api/admin/reset-password', (req, res) => {
   }
 
   res.status(404).json({ error: '대상 계정을 찾을 수 없습니다.' });
+});
+
+// 7. ADMIN DELETE TEACHER ACCOUNT API
+app.delete('/api/admin/teachers/:id', (req, res) => {
+  const teacherId = req.params.id;
+  const initialCount = teachersStore.length;
+  teachersStore = teachersStore.filter(t => t.id !== teacherId && t.username !== teacherId);
+
+  if (teachersStore.length < initialCount) {
+    return res.json({ success: true, message: '교사 계정이 삭제되었습니다.' });
+  }
+  res.status(404).json({ error: '해당 교사 계정을 찾을 수 없습니다.' });
+});
+
+// 8. ADMIN DELETE STUDENT ACCOUNT API
+app.delete('/api/admin/students/:id', (req, res) => {
+  const studentId = req.params.id;
+  const initialCount = studentsStore.length;
+  studentsStore = studentsStore.filter(s => s.id !== studentId && s.username !== studentId);
+
+  if (studentsStore.length < initialCount) {
+    return res.json({ success: true, message: '학생 계정이 삭제되었습니다.' });
+  }
+  res.status(404).json({ error: '해당 학생 계정을 찾을 수 없습니다.' });
+});
+
+// 9. ADMIN DELETE CLASS API
+app.delete('/api/admin/classes/:classNumber', (req, res) => {
+  const cNum = parseInt(req.params.classNumber);
+  const initialCount = classesStore.length;
+  classesStore = classesStore.filter(c => c.classNumber !== cNum);
+
+  if (classesStore.length < initialCount) {
+    return res.json({ success: true, message: `${cNum}반 학급이 삭제되었습니다.` });
+  }
+  res.status(404).json({ error: '해당 학급을 찾을 수 없습니다.' });
 });
 
 // --- EXISTING CORE DASHBOARD APIs ---

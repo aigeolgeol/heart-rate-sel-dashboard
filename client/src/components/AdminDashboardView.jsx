@@ -9,7 +9,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   X,
-  Layers
+  Layers,
+  Trash2
 } from 'lucide-react';
 
 export default function AdminDashboardView({ currentSession, onSessionChange }) {
@@ -22,6 +23,10 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
   const [resetTarget, setResetTarget] = useState(null); // { id, name, username, role }
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [resetMsg, setResetMsg] = useState('');
+
+  // Delete confirm modal state
+  const [deleteTarget, setDeleteTarget] = useState(null); // { id, name, type: 'teacher' | 'student' | 'class', label }
+  const [deleteMsg, setDeleteMsg] = useState('');
 
   const fetchOverview = async () => {
     setLoading(true);
@@ -61,7 +66,32 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
           setNewPasswordInput('');
           setResetMsg('');
           fetchOverview();
-        }, 1500);
+        }, 1200);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Handler
+  const handleDeleteSubmit = async () => {
+    if (!deleteTarget) return;
+    try {
+      let endpoint = '';
+      if (deleteTarget.type === 'teacher') endpoint = `/api/admin/teachers/${deleteTarget.id}`;
+      else if (deleteTarget.type === 'student') endpoint = `/api/admin/students/${deleteTarget.id}`;
+      else if (deleteTarget.type === 'class') endpoint = `/api/admin/classes/${deleteTarget.id}`;
+
+      const res = await fetch(endpoint, { method: 'DELETE' });
+      const data = await res.json();
+
+      if (data.success) {
+        setDeleteMsg(data.message);
+        setTimeout(() => {
+          setDeleteTarget(null);
+          setDeleteMsg('');
+          fetchOverview();
+        }, 1200);
       }
     } catch (err) {
       console.error(err);
@@ -71,7 +101,7 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
   if (loading || !overview) {
     return (
       <div className="max-w-7xl mx-auto py-12 px-4 text-center text-slate-500">
-        관리자 데이터 로딩 중...
+        관리자 마스터 데이터 로딩 중...
       </div>
     );
   }
@@ -88,12 +118,12 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
           <div>
             <h2 className="text-2xl font-black">총괄 관리자(Admin) 마스터 패널</h2>
             <p className="text-xs text-amber-100 mt-1">
-              전체 교사 계정 관리, 학급 개설 현황, 학생 계정 정보 및 비밀번호 리셋 총괄
+              교사·학생 계정 생성/삭제, 학급 관리, 비밀번호 초기화 및 시스템 총괄
             </p>
           </div>
         </div>
 
-        {/* Global Session Switcher for Admin */}
+        {/* Global Session Switcher */}
         <div className="bg-slate-900/80 px-4 py-2 rounded-2xl border border-amber-400/40 text-xs flex items-center gap-2">
           <Layers size={16} className="text-amber-400" />
           <span>전체 수업 진행:</span>
@@ -176,11 +206,10 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              학급 개설 현황 ({overview.classes.length})
+              학급 현황 관리 ({overview.classes.length})
             </button>
           </div>
 
-          {/* Search Box */}
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3.5 top-3 text-slate-400" size={15} />
             <input 
@@ -205,6 +234,7 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
                   <th className="py-3.5 px-4">소속 학교</th>
                   <th className="py-3.5 px-4">담당 학급</th>
                   <th className="py-3.5 px-4 text-center">비밀번호 초기화</th>
+                  <th className="py-3.5 px-4 text-center">계정 삭제</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -224,10 +254,19 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
                       <td className="py-3 px-4 text-center">
                         <button
                           onClick={() => setResetTarget({ id: t.id, name: t.name, username: t.username, role: 'teacher' })}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 mx-auto transition-colors"
+                          className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg shadow-sm flex items-center gap-1 mx-auto transition-colors"
                         >
-                          <Key size={13} />
+                          <Key size={12} />
                           <span>비밀번호 변경</span>
+                        </button>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() => setDeleteTarget({ id: t.id, name: t.name, type: 'teacher', label: `교사 [${t.name}] 계정` })}
+                          className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-lg border border-rose-300 flex items-center gap-1 mx-auto transition-colors"
+                        >
+                          <Trash2 size={12} />
+                          <span>삭제</span>
                         </button>
                       </td>
                     </tr>
@@ -250,6 +289,7 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
                   <th className="py-3.5 px-4">로그인 아이디</th>
                   <th className="py-3.5 px-4">현재 점수</th>
                   <th className="py-3.5 px-4 text-center">비밀번호 초기화</th>
+                  <th className="py-3.5 px-4 text-center">계정 삭제</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -266,10 +306,19 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
                       <td className="py-3 px-4 text-center">
                         <button
                           onClick={() => setResetTarget({ id: s.id, name: s.name, username: s.username, role: 'student' })}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 mx-auto transition-colors"
+                          className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg shadow-sm flex items-center gap-1 mx-auto transition-colors"
                         >
-                          <Key size={13} />
+                          <Key size={12} />
                           <span>비밀번호 리셋</span>
+                        </button>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() => setDeleteTarget({ id: s.id, name: s.name, type: 'student', label: `학생 [${s.name}] 계정` })}
+                          className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-lg border border-rose-300 flex items-center gap-1 mx-auto transition-colors"
+                        >
+                          <Trash2 size={12} />
+                          <span>삭제</span>
                         </button>
                       </td>
                     </tr>
@@ -289,6 +338,7 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
                   <th className="py-3.5 px-4">학급 명칭</th>
                   <th className="py-3.5 px-4">담당 교사 ID</th>
                   <th className="py-3.5 px-4">소속 학생 수</th>
+                  <th className="py-3.5 px-4 text-center">학급 삭제</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -298,6 +348,15 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
                     <td className="py-3 px-4 font-bold text-slate-900">{c.name}</td>
                     <td className="py-3 px-4 font-medium text-slate-600">{c.teacherId}</td>
                     <td className="py-3 px-4 font-bold text-indigo-600">{c.studentCount}명</td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => setDeleteTarget({ id: c.classNumber, name: c.name, type: 'class', label: `[${c.name}] 학급` })}
+                        className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-lg border border-rose-300 flex items-center gap-1 mx-auto transition-colors"
+                      >
+                        <Trash2 size={12} />
+                        <span>학급 삭제</span>
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -311,7 +370,6 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
       {resetTarget && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
-            
             <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Key className="text-amber-500" size={18} />
@@ -340,7 +398,7 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
                   placeholder="새로운 비밀번호를 입력하세요"
                   value={newPasswordInput}
                   onChange={(e) => setNewPasswordInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-amber-500"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-amber-500 font-bold"
                 />
               </div>
             </div>
@@ -348,18 +406,62 @@ export default function AdminDashboardView({ currentSession, onSessionChange }) 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setResetTarget(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
               >
                 취소
               </button>
               <button
                 onClick={handleResetPasswordSubmit}
-                className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs shadow-md"
+                className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs shadow-md cursor-pointer"
               >
                 비밀번호 변경하기
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
+      {/* ADMIN DELETE CONFIRMATION MODAL */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-rose-200 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-rose-100 pb-3 mb-4">
+              <h3 className="text-base font-bold text-rose-600 flex items-center gap-2">
+                <Trash2 size={18} />
+                {deleteTarget.label} 삭제 확인
+              </h3>
+              <button onClick={() => setDeleteTarget(null)} className="text-slate-400 hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+
+            {deleteMsg ? (
+              <div className="p-3 bg-emerald-50 text-emerald-700 rounded-xl text-xs flex items-center gap-2 border border-emerald-200 mb-4">
+                <CheckCircle2 size={16} />
+                <span>{deleteMsg}</span>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-700 leading-relaxed mb-6">
+                정말로 <strong className="text-rose-600">{deleteTarget.label}</strong>를(을) 시스템에서 영구적으로 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.
+              </p>
+            )}
+
+            {!deleteMsg && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleDeleteSubmit}
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs shadow-md cursor-pointer"
+                >
+                  영구 삭제
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
